@@ -1,0 +1,152 @@
+Express API - Usage Notes (Port 5100)
+====================================
+
+Start the server (live logs in terminal)
+----------------------------------------
+- Use 5100 regardless of .env:
+  PORT=5100 node server.js
+
+- Or set once in .env:
+  PORT=5100
+  HOST=0.0.0.0
+  # Then run
+  node server.js
+
+Background (daemon-like) and logs
+---------------------------------
+- Start and tail logs with nohup:
+  nohup PORT=5100 node server.js > server.log 2>&1 &
+  tail -f server.log
+
+- Stop later:
+  pkill -f "node server.js"
+
+- Scripts available:
+  chmod +x scripts/start-daemon.sh scripts/stop-daemon.sh
+  ./scripts/start-daemon.sh           # starts on 5100 by default (uses PORT if set)
+  tail -f server.log                  # view logs
+  ./scripts/stop-daemon.sh            # stops the background server
+
+Health check
+------------
+  curl http://127.0.0.1:5100/health
+
+Upload + translate (SRT or TXT)
+-------------------------------
+- Basic (defaults to English):
+  curl -X POST http://127.0.0.1:5100/api/translate \
+    -F "file=@/absolute/path/to/subtitle.srt"
+
+- Specific language:
+  curl -X POST http://127.0.0.1:5100/api/translate \
+    -F "file=@/absolute/path/to/subtitle.srt" \
+    -F "to=Spanish"
+
+- Advanced options:
+  curl -X POST http://127.0.0.1:5100/api/translate \
+    -F "file=@/absolute/path/to/subtitle.srt" \
+    -F "to=French" \
+    -F "from=English" \
+    -F "model=gpt-4o-mini" \
+    -F "temperature=0.3" \
+    -F "structuredMode=array" \
+    -F "batchSizes=[10,100]" \
+    -F "historyPromptLength=100" \
+    -F "useModerator=false" \
+    -F "prefixNumber=false" \
+    -F "lineMatching=false" \
+    -F "systemInstruction=Translate casual tone to formal Japanese"
+
+Translate by server path
+------------------------
+- Basic:
+  curl -X POST http://127.0.0.1:5100/api/translate-path \
+    -H "Content-Type: application/json" \
+    -d '{
+      "inputPath": "/absolute/path/to/subtitle.srt",
+      "to": "Spanish"
+    }'
+
+- With options:
+  curl -X POST http://127.0.0.1:5100/api/translate-path \
+    -H "Content-Type: application/json" \
+    -d '{
+      "inputPath": "/absolute/path/to/subtitle.srt",
+      "outputPath": "/absolute/path/to/output.srt",
+      "to": "French",
+      "from": "English",
+      "model": "gpt-4o-mini",
+      "temperature": 0.3,
+      "structuredMode": "array",
+      "historyPromptLength": 100,
+      "useModerator": false,
+      "prefixNumber": false,
+      "lineMatching": true,
+      "systemInstruction": "Translate with a formal tone"
+    }'
+
+Download translated file
+------------------------
+- If you uploaded a file, the response contains outputFileName:
+  curl -O "http://127.0.0.1:5100/api/download/<outputFileName>"
+
+- Example (auto-extract file name and download):
+  RESPONSE=$(curl -s -X POST http://127.0.0.1:5100/api/translate \
+    -F "file=@/absolute/path/to/subtitle.srt" \
+    -F "to=Spanish")
+  FILENAME=$(echo "$RESPONSE" | jq -r '.outputFileName')
+  curl -O "http://127.0.0.1:5100/api/download/$FILENAME"
+
+Requirements
+------------
+- Set your OpenAI key in .env before translating:
+  OPENAI_API_KEY=sk-...
+- Required packages (install manually as needed):
+  npm install express multer loglevel undici dotenv openai
+
+Notes
+-----
+- structuredMode accepts only: array | object (anything else disables it)
+- Booleans in multipart are strings; use 'false' to disable features
+- Arrays in multipart are JSON strings (e.g., [10,100])
+- Keep terminal open for live logs if not running with nohup
+
+
+--------------------------------------
+
+
+actual processing example:
+
+
+
+coil@coil-VM:chatgpt-subtitle-translator$ 
+coil@coil-VM:chatgpt-subtitle-translator$ 
+coil@coil-VM:chatgpt-subtitle-translator$ curl http://127.0.0.1:5100/health
+{"status":"ok","service":"chatgpt-subtitlecurl -s -X POST http://127.0.0.1:5100/api/translate \$ curl -s -X POST http://127.0.0.1:5100/api/translate \
+  -F "file=@test/data/test_ja_small.srt" \
+  -F "to=English" \
+  -F "temperature=0.3" \
+  | tee response.json
+
+# Download the translated SRT
+FILENAME=$(jq -r '.outputFileName' response.json)
+curl -O "http://127.0.0.1:5100/api/download/$FILENAME"
+{"success":true,"message":"Translation completed","outputFile":"uploads/test_ja_small.out.srt","outputFileName":"test_ja_small.out.srt","statistics":{"promptTokensUsed":605,"promptTokensWasted":199,"cachedTokens":0,"completionTokensUsed":355,"completionTokensWasted":175,"estimatedCost":0,"linesTranslated":20}}  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100   278  100   278    0     0  18888      0 --:--:-- --:--:-- --:--:-- 19857
+coil@coil-VM:chatgpt-subtitle-translator$ INPUT="$(pwd)/test/data/test_ja_small.srt"
+curl -s -X POST http://127.0.0.1:5100/api/translate-path \
+  -H "Content-Type: application/json" \
+  -d "{\"inputPath\":\"$INPUT\",\"to\":\"English\",\"temperature\":0.3}" \
+  | tee response.json
+
+# If you set outputPath in the request, use that path directly; otherwise just read response.json for the output path
+{"success":true,"message":"Translation completed","outputFile":"/home/coil/Desktop/gpt_srt_translator_js/chatgpt-subtitle-translator/test/data/test_ja_small.out.srt","statistics":{"promptTokensUsed":59,"promptTokensWasted":0,"cachedTokens":0,"completionTokensUsed":38,"completionTokensWasted":0,"estimatedCost":0,"linesTranslated":5}}coil@coil-VM:chatgpt-subtitle-translator$ 
+
+
+
+
+
+
+
+

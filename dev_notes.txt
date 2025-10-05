@@ -14,9 +14,19 @@ song takes few seconds to translate:
 to translate bite size japanese podcast 15-20 minute long, it would take like 5 minutes.
 but this is like in context batch translations, so will be good quality
 but has to go through patreon, no other option, would be too expensive
+makes like 200 calls, lol, quite a lot
+
 
 so needs to be batch process
 
 like celery or something
+
+
+
+
+
+takes 5 mins:
+
+coil@coil-VM:chatgpt-subtitle-translator$ cli/translator.mjs --stream --temperature 0 --input songs/bsj_624_時間の使い方を考える_Japanese_Listening_Practice\ N3・N2レベル【中級_Ep.624.srt 
 
 

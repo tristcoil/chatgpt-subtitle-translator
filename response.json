@@ -1,0 +1,1 @@
+{"success":true,"message":"Translation completed","outputFile":"/home/coil/Desktop/gpt_srt_translator_js/chatgpt-subtitle-translator/test/data/test_ja_small.out.srt","statistics":{"promptTokensUsed":59,"promptTokensWasted":0,"cachedTokens":0,"completionTokensUsed":38,"completionTokensWasted":0,"estimatedCost":0,"linesTranslated":5}}
