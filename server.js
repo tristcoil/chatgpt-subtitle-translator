@@ -25,6 +25,15 @@ import {
 const app = express();
 app.use(express.json());
 
+// Minimal CORS for frontend (adjust in production)
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
+
 // Simple request logger (no extra deps)
 app.use((req, res, next) => {
   const start = Date.now();
@@ -67,7 +76,7 @@ const coolerChatGPTAPI = new CooldownContext(Number(process.env.OPENAI_API_RPM ?
 const coolerOpenAIModerator = new CooldownContext(Number(process.env.OPENAI_API_RPM ?? process.env.OPENAI_API_MODERATOR_RPM ?? 60), 60000, 'OpenAIModerator');
 
 // Core translation helper
-async function performTranslation(inputFilePath, outputFilePath, options = {}) {
+async function performTranslation(inputFilePath, outputFilePath, options = {}, onProgress = undefined) {
   const {
     from = undefined,
     to = 'English',
@@ -164,16 +173,24 @@ async function performTranslation(inputFilePath, outputFilePath, options = {}) {
 
   if (isSrtFile) {
     const srtArrayWorking = subtitleParser.fromSrt(inputContent);
+    let completed = 0;
+    const total = srtArrayWorking.length;
     for await (const output of translator.translateLines(lines)) {
       const srtEntry = srtArrayWorking[output.index - 1];
       srtEntry.text = output.finalTransform;
+      completed = output.index;
+      onProgress?.({ completed, total });
     }
     const outputSrt = subtitleParser.toSrt(srtArrayWorking);
     fs.writeFileSync(outputFilePath, outputSrt, 'utf8');
   } else {
     const translatedLines = [];
+    let completed = 0;
+    const total = lines.length;
     for await (const output of translator.translateLines(lines)) {
       translatedLines.push(output.transform);
+      completed++;
+      onProgress?.({ completed, total });
     }
     fs.writeFileSync(outputFilePath, translatedLines.join('\n'), 'utf8');
   }
@@ -188,6 +205,24 @@ async function performTranslation(inputFilePath, outputFilePath, options = {}) {
     estimatedCost: usage.usedTokensPricing,
     linesTranslated: isSrtFile ? subtitleParser.fromSrt(inputContent).length : lines.length,
   };
+}
+
+// ------------------------------
+// Simple in-memory job manager
+// ------------------------------
+/** @type {Map<string, any>} */
+const jobs = new Map();
+
+function createJobId() {
+  return `job_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function getJob(id) {
+  return jobs.get(id);
+}
+
+function setJob(id, data) {
+  jobs.set(id, { ...(jobs.get(id) || {}), ...data, updatedAt: Date.now() });
 }
 
 // Health
@@ -246,6 +281,144 @@ app.post('/api/translate', upload.single('file'), async (req, res) => {
   }
 });
 
+// Async upload and translate (returns jobId immediately)
+app.post('/api/translate-async', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const inputFilePath = req.file.path;
+    const originalName = req.file.originalname;
+    const outputFileName = `${path.parse(originalName).name}.out${path.extname(originalName)}`;
+    const outputFilePath = path.join('uploads', outputFileName);
+
+    const sm = req.body.structuredMode;
+    const normalizedStructuredMode = sm === 'array' ? 'array' : sm === 'object' ? 'object' : false;
+
+    const options = {
+      to: req.body.to || 'English',
+      from: req.body.from,
+      model: req.body.model,
+      temperature: req.body.temperature ? parseFloat(req.body.temperature) : undefined,
+      batchSizes: req.body.batchSizes ? JSON.parse(req.body.batchSizes) : undefined,
+      historyPromptLength: req.body.historyPromptLength ? parseInt(req.body.historyPromptLength) : undefined,
+      useModerator: req.body.useModerator !== 'false',
+      prefixNumber: req.body.prefixNumber !== 'false',
+      lineMatching: req.body.lineMatching !== 'false',
+      systemInstruction: req.body.systemInstruction,
+      structuredMode: normalizedStructuredMode,
+      logLevel: req.body.logLevel || 'info',
+    };
+
+    const jobId = createJobId();
+    /** track SSE clients */
+    const clients = new Set();
+    setJob(jobId, {
+      id: jobId,
+      status: 'queued',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      file: originalName,
+      inputFilePath,
+      outputFilePath,
+      outputFileName,
+      progress: { completed: 0, total: 0 },
+      error: null,
+      stats: null,
+      clients,
+    });
+
+    // Start background processing
+    ;(async () => {
+      try {
+        setJob(jobId, { status: 'processing' });
+
+        // Determine total upfront
+        const inputContent = fs.readFileSync(inputFilePath, 'utf8');
+        const isSrtFile = inputFilePath.toLowerCase().endsWith('.srt');
+        const total = isSrtFile ? subtitleParser.fromSrt(inputContent).length : inputContent.split('\n').length;
+        setJob(jobId, { progress: { completed: 0, total } });
+
+        const stats = await performTranslation(inputFilePath, outputFilePath, options, ({ completed, total }) => {
+          setJob(jobId, { progress: { completed, total } });
+          // Notify SSE subscribers
+          const job = getJob(jobId);
+          for (const res of job.clients) {
+            res.write(`event: progress\n`);
+            res.write(`data: ${JSON.stringify({ completed, total })}\n\n`);
+          }
+        });
+
+        setJob(jobId, { status: 'done', stats });
+        const job = getJob(jobId);
+        for (const res of job.clients) {
+          res.write(`event: done\n`);
+          res.write(`data: ${JSON.stringify({ outputFileName, outputFilePath, stats })}\n\n`);
+          res.end();
+        }
+        job.clients.clear();
+
+        // Clean up input file
+        setTimeout(() => { try { fs.unlinkSync(inputFilePath); } catch {} }, 60000);
+      } catch (err) {
+        setJob(jobId, { status: 'error', error: String(err?.message || err) });
+        const job = getJob(jobId);
+        for (const res of job.clients) {
+          res.write(`event: error\n`);
+          res.write(`data: ${JSON.stringify({ message: String(err?.message || err) })}\n\n`);
+          res.end();
+        }
+        job.clients.clear();
+      }
+    })();
+
+    res.json({ success: true, jobId, message: 'Job queued' });
+  } catch (error) {
+    log.error('[API Error]', error);
+    res.status(500).json({ error: 'Translation enqueue failed', message: error.message });
+  }
+});
+
+// Job status
+app.get('/api/jobs/:id', (req, res) => {
+  const job = getJob(req.params.id);
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+  const { id, status, file, outputFileName, progress, error, stats, createdAt, updatedAt } = job;
+  res.json({ id, status, file, outputFileName, progress, error, stats, createdAt, updatedAt });
+});
+
+// Job progress via Server-Sent Events (SSE)
+app.get('/api/jobs/:id/events', (req, res) => {
+  const job = getJob(req.params.id);
+  if (!job) return res.status(404).end();
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  // Register client
+  job.clients.add(res);
+
+  // Send initial state
+  res.write(`event: status\n`);
+  res.write(`data: ${JSON.stringify({ status: job.status, progress: job.progress })}\n\n`);
+
+  req.on('close', () => {
+    try { job.clients.delete(res); } catch {}
+  });
+});
+
+// Job download (alias to existing download)
+app.get('/api/jobs/:id/download', (req, res) => {
+  const job = getJob(req.params.id);
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+  if (job.status !== 'done') return res.status(409).json({ error: 'Job not completed' });
+  const filePath = job.outputFilePath;
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Output file not found' });
+  res.download(filePath, path.basename(filePath));
+});
 // Translate by path
 app.post('/api/translate-path', async (req, res) => {
   try {

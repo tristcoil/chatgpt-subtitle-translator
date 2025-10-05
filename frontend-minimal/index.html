@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Subtitle Translator - Minimal (React)</title>
+    <!-- React via CDN (no build tools) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <style>
+      body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji"; padding: 20px; }
+      .row { margin: 10px 0; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+      .progress { height: 10px; background: #eee; border-radius: 6px; overflow: hidden; }
+      .bar { height: 100%; background: #4f46e5; width: 0%; transition: width .2s; }
+      .hidden { display: none; }
+      .success { color: #16a34a; }
+      .error { color: #dc2626; }
+      .muted { color: #6b7280; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      const { useState, useRef } = React;
+
+      function App() {
+        const [serverUrl, setServerUrl] = useState('http://127.0.0.1:5100');
+        const [toLang, setToLang] = useState('English');
+        const [status, setStatus] = useState('Idle');
+        const [completed, setCompleted] = useState(0);
+        const [total, setTotal] = useState(0);
+        const [error, setError] = useState('');
+        const [downloadHref, setDownloadHref] = useState('');
+        const fileRef = useRef(null);
+
+        function setProgress(c, t) {
+          setCompleted(c || 0);
+          setTotal(t || 0);
+        }
+
+        async function startTranslate() {
+          setError('');
+          setDownloadHref('');
+          setProgress(0, 0);
+
+          const file = fileRef.current?.files?.[0];
+          if (!file) { setError('Please choose a file.'); return; }
+
+          setStatus('Uploading and enqueueing...');
+          const form = new FormData();
+          form.append('file', file);
+          form.append('to', toLang || 'English');
+
+          const enqueueRes = await fetch(`${serverUrl}/api/translate-async`, { method: 'POST', body: form });
+          if (!enqueueRes.ok) { setError('Failed to enqueue job'); return; }
+          const { jobId } = await enqueueRes.json();
+          setStatus(`Job queued: ${jobId}`);
+
+          const sse = new EventSource(`${serverUrl}/api/jobs/${jobId}/events`);
+          sse.addEventListener('status', (ev) => {
+            try {
+              const data = JSON.parse(ev.data);
+              setStatus(`Status: ${data.status}`);
+              setProgress(data.progress?.completed, data.progress?.total);
+            } catch {}
+          });
+          sse.addEventListener('progress', (ev) => {
+            try {
+              const data = JSON.parse(ev.data);
+              setStatus('Processing...');
+              setProgress(data.completed, data.total);
+            } catch {}
+          });
+          sse.addEventListener('done', (ev) => {
+            try {
+              const data = JSON.parse(ev.data);
+              setStatus('Completed');
+              const dlUrl = `${serverUrl}/api/download/${encodeURIComponent(data.outputFileName)}`;
+              setDownloadHref(dlUrl);
+            } catch {}
+            sse.close();
+          });
+          sse.addEventListener('error', (ev) => {
+            try {
+              const data = JSON.parse(ev.data);
+              setError(data.message || 'Job error');
+            } catch {
+              setError('Job error');
+            }
+            sse.close();
+          });
+        }
+
+        const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+        return React.createElement(
+          'div',
+          null,
+          React.createElement('h1', null, 'Subtitle Translator (Minimal React)'),
+          React.createElement('div', { className: 'row' },
+            React.createElement('label', { htmlFor: 'serverUrlInput' }, 'Server URL:'),
+            ' ',
+            React.createElement('input', { id: 'serverUrlInput', className: 'mono', size: 40, value: serverUrl, onChange: (e) => setServerUrl(e.target.value), title: 'Server URL' })
+          ),
+          React.createElement('div', { className: 'row' },
+            React.createElement('label', { htmlFor: 'toLangInput' }, 'Target Language:'),
+            ' ',
+            React.createElement('input', { id: 'toLangInput', value: toLang, onChange: (e) => setToLang(e.target.value), title: 'Target Language' })
+          ),
+          React.createElement('div', { className: 'row' },
+            React.createElement('label', { htmlFor: 'fileInput' }, 'File:'),
+            ' ',
+            React.createElement('input', { id: 'fileInput', type: 'file', accept: '.srt,.txt', ref: fileRef, title: 'Choose .srt or .txt file' }),
+            ' ',
+            React.createElement('button', { onClick: () => startTranslate() }, 'Start Translation')
+          ),
+          React.createElement('div', { className: 'row muted' }, status),
+          React.createElement('div', { className: 'row' },
+            React.createElement('div', { className: 'progress' }, React.createElement('div', { className: 'bar', style: { width: percent + '%' } })),
+            React.createElement('div', { className: 'muted' }, `${completed} / ${total}`)
+          ),
+          error ? React.createElement('div', { className: 'row error' }, error) : null,
+          downloadHref ? React.createElement('div', { className: 'row' },
+            React.createElement('div', { className: 'success' }, 'Completed!'),
+            React.createElement('a', { id: 'downloadLink', href: downloadHref, download: true }, 'Download Translated File')
+          ) : null
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(React.createElement(App));
+    </script>
+  </body>
+</html>

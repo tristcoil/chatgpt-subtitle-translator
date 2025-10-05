@@ -141,7 +141,48 @@ curl -s -X POST http://127.0.0.1:5100/api/translate-path \
   | tee response.json
 
 # If you set outputPath in the request, use that path directly; otherwise just read response.json for the output path
-{"success":true,"message":"Translation completed","outputFile":"/home/coil/Desktop/gpt_srt_translator_js/chatgpt-subtitle-translator/test/data/test_ja_small.out.srt","statistics":{"promptTokensUsed":59,"promptTokensWasted":0,"cachedTokens":0,"completionTokensUsed":38,"completionTokensWasted":0,"estimatedCost":0,"linesTranslated":5}}coil@coil-VM:chatgpt-subtitle-translator$ 
+{"success":true,"message":"Translation completed","outputFile":"/home/coil/Desktop/gpt_srt_translator_js/chatgpt-subtitle-translator/test/data/test_ja_small.out.srt","statistics":{"promptTokensUsed":59,"promptTokensWasted":0,"cachedTokens":0,"completionTokensUsed":38,"completionTokensWasted":0,"estimatedCost":0,"linesTranslated":5}}coil@coil-VM:chatgpt-subtitle-translator$
+
+Async translation jobs (recommended for long runs)
+-------------------------------------------------
+Enqueue an async translation job (returns jobId immediately):
+  curl -s -X POST http://127.0.0.1:5100/api/translate-async \
+    -F "file=@/absolute/path/to/subtitle.srt" \
+    -F "to=English" \
+    | tee job.json
+
+Extract job id:
+  JOB_ID=$(jq -r '.jobId' job.json)
+
+Subscribe to live progress via SSE (Server-Sent Events):
+  curl -N http://127.0.0.1:5100/api/jobs/$JOB_ID/events
+
+Poll job status (alternative to SSE):
+  curl http://127.0.0.1:5100/api/jobs/$JOB_ID
+
+Download the result when finished:
+  curl -O "http://127.0.0.1:5100/api/jobs/$JOB_ID/download"
+
+Or using outputFileName from job status:
+  FILENAME=$(curl -s http://127.0.0.1:5100/api/jobs/$JOB_ID | jq -r '.outputFileName')
+  curl -O "http://127.0.0.1:5100/api/download/$FILENAME"
+
+Minimal React frontend (no build tools)
+--------------------------------------
+Location:
+  frontend-minimal/index.html
+
+Usage:
+  1) Start the API on port 5100
+     PORT=5100 node server.js
+  2) Open the HTML in a modern browser (double-click or serve statically)
+  3) Set the Server URL if needed (defaults to http://127.0.0.1:5100)
+  4) Choose an .srt/.txt file and click "Start Translation"
+  5) Progress will update live via SSE and a download link appears when done
+
+Notes:
+  - CORS is enabled permissively for dev; lock it down in production.
+  - Long jobs are processed in the background; you can close the SSE view and poll status later.
 
 
 
