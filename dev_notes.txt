@@ -1,0 +1,22 @@
+my calls:
+
+coil@coil-VM:chatgpt-subtitle-translator$ cli/translator.mjs --stream --temperature 0 --input songs/raon_bansanka.srt 
+
+
+song takes few seconds to translate:
+
+[Translator] Estimated Usage - Tokens: 1164 $ 0 Wasted: 0 $ 0 0% Cached: 0 Rate: 4327.14 TPM 0 RPM
+
+
+
+
+
+to translate bite size japanese podcast 15-20 minute long, it would take like 5 minutes.
+but this is like in context batch translations, so will be good quality
+but has to go through patreon, no other option, would be too expensive
+
+so needs to be batch process
+
+like celery or something
+
+
