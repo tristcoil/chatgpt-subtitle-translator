@@ -409,7 +409,9 @@ export class Translator
                 finalTransform = splits.text
                 outTransform = splits.text
                 const expectedLabel = workingIndex + 1
-                if (expectedLabel !== splits.number)
+                // Only flag if there's a label AND it's wrong (not just missing)
+                // Missing labels are acceptable if line count matches
+                if (splits.number !== undefined && expectedLabel !== splits.number)
                 {
                     log.warn("[Translator]", "Label mismatch", expectedLabel, splits.number)
                     this.moderatorFlags.set(workingIndex, { remarks: "Label Mismatch", outIndex: splits.number })

@@ -112,6 +112,40 @@ Notes
 - Keep terminal open for live logs if not running with nohup
 
 
+Ollama (local LLM) usage
+------------------------
+Run Ollama in Docker (OpenAI-compatible endpoint at :11434/v1):
+```bash
+docker run -d --name ollama -p 11434:11434 --gpus=all -v ollama:/root/.ollama ollama/ollama:latest
+# optional: pre-pull a model, e.g., llama3.2:3b
+docker exec -it ollama ollama pull llama3.2:3b
+```
+
+Translate using Ollama provider:
+```bash
+PORT=5100 LLM_PROVIDER=ollama OLLAMA_OPENAI_BASE_URL=http://127.0.0.1:11434/v1 node server.js
+
+# multipart upload
+curl -X POST http://127.0.0.1:5100/api/translate \
+  -F "file=@test/data/test_ja_small.srt" \
+  -F "to=English" \
+  -F "model=llama3.2:3b" \
+  -F "provider=ollama"
+
+# async job
+curl -s -X POST http://127.0.0.1:5100/api/translate-async \
+  -F "file=@test/data/test_ja_small.srt" \
+  -F "to=English" \
+  -F "model=llama3.2:3b" \
+  -F "provider=ollama" | tee job.json
+```
+
+Notes for Ollama:
+- Moderation API is disabled automatically; useModerator is ignored.
+- Structured output modes may be disabled depending on adapter support.
+- Choose a chat-capable model (e.g., llama3.2:3b, qwen2.5, mistral) and set with `model=`.
+
+
 --------------------------------------
 
 

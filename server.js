@@ -71,9 +71,42 @@ function getProxyAgent() {
 }
 
 const proxyAgent = getProxyAgent();
-const openai = createOpenAIClient(process.env.OPENAI_API_KEY, undefined, process.env.OPENAI_BASE_URL, proxyAgent);
-const coolerChatGPTAPI = new CooldownContext(Number(process.env.OPENAI_API_RPM ?? 60), 60000, 'ChatGPTAPI');
-const coolerOpenAIModerator = new CooldownContext(Number(process.env.OPENAI_API_RPM ?? process.env.OPENAI_API_MODERATOR_RPM ?? 60), 60000, 'OpenAIModerator');
+
+// Provider-aware client factory (OpenAI or Ollama via OpenAI-compatible API)
+const DEFAULT_PROVIDER = (process.env.LLM_PROVIDER || 'openai').toLowerCase();
+const clientsCache = new Map();
+
+function getLLMClients(provider = DEFAULT_PROVIDER) {
+  const key = provider.toLowerCase();
+  if (clientsCache.has(key)) return clientsCache.get(key);
+
+  /**
+   * Supported providers:
+   *  - openai: requires OPENAI_API_KEY, optional OPENAI_BASE_URL
+   *  - ollama: uses OLLAMA_OPENAI_BASE_URL (default http://127.0.0.1:11434/v1)
+   *            apiKey can be any non-empty string (placeholder used)
+   */
+  let baseURL;
+  let apiKey;
+  let moderationEnabled = true;
+
+  if (key === 'ollama') {
+    baseURL = process.env.OLLAMA_OPENAI_BASE_URL || 'http://127.0.0.1:11434/v1';
+    apiKey = process.env.OLLAMA_OPENAI_API_KEY || 'sk-ollama';
+  } else {
+    baseURL = process.env.OPENAI_BASE_URL; // optional
+    apiKey = process.env.OPENAI_API_KEY;
+    moderationEnabled = true;
+  }
+
+  const openai = createOpenAIClient(apiKey, undefined, baseURL, proxyAgent);
+  const coolerChat = new CooldownContext(Number(process.env.OPENAI_API_RPM ?? 60), 60000, 'ChatGPTAPI');
+  const coolerMod = new CooldownContext(Number(process.env.OPENAI_API_RPM ?? process.env.OPENAI_API_MODERATOR_RPM ?? 60), 60000, 'OpenAIModerator');
+
+  const value = { provider: key, openai, coolerChat, coolerMod, moderationEnabled };
+  clientsCache.set(key, value);
+  return value;
+}
 
 // Core translation helper
 async function performTranslation(inputFilePath, outputFilePath, options = {}, onProgress = undefined) {
@@ -90,12 +123,17 @@ async function performTranslation(inputFilePath, outputFilePath, options = {}, o
     systemInstruction = undefined,
     structuredMode = false,
     logLevel = 'info',
+    provider: requestedProvider,
+    inputOriginalName,
   } = options;
 
   try { log.setLevel(/** @type {import('loglevel').LogLevelDesc} */ (logLevel)); } catch {}
 
+  const { provider, openai, coolerChat, coolerMod, moderationEnabled } = getLLMClients(requestedProvider);
+
   const inputContent = fs.readFileSync(inputFilePath, 'utf8');
-  const isSrtFile = inputFilePath.toLowerCase().endsWith('.srt');
+  const isSrtFile = (inputOriginalName && inputOriginalName.toLowerCase().endsWith('.srt'))
+    || inputFilePath.toLowerCase().endsWith('.srt');
 
   let lines;
   if (isSrtFile) {
@@ -125,11 +163,11 @@ async function performTranslation(inputFilePath, outputFilePath, options = {}, o
       { from, to },
       {
         openai,
-        cooler: coolerChatGPTAPI,
-        ...(useModerator && {
+        cooler: coolerChat,
+        ...(useModerator && moderationEnabled && {
           moderationService: {
             openai,
-            cooler: coolerOpenAIModerator,
+            cooler: coolerMod,
           },
         }),
       },
@@ -140,11 +178,11 @@ async function performTranslation(inputFilePath, outputFilePath, options = {}, o
       { from, to },
       {
         openai,
-        cooler: coolerChatGPTAPI,
-        ...(useModerator && {
+        cooler: coolerChat,
+        ...(useModerator && moderationEnabled && {
           moderationService: {
             openai,
-            cooler: coolerOpenAIModerator,
+            cooler: coolerMod,
           },
         }),
       },
@@ -155,11 +193,11 @@ async function performTranslation(inputFilePath, outputFilePath, options = {}, o
       { from, to },
       {
         openai,
-        cooler: coolerChatGPTAPI,
-        ...(useModerator && {
+        cooler: coolerChat,
+        ...(useModerator && moderationEnabled && {
           moderationService: {
             openai,
-            cooler: coolerOpenAIModerator,
+            cooler: coolerMod,
           },
         }),
       },
@@ -258,6 +296,8 @@ app.post('/api/translate', upload.single('file'), async (req, res) => {
       systemInstruction: req.body.systemInstruction,
       structuredMode: normalizedStructuredMode,
       logLevel: req.body.logLevel || 'info',
+      provider: (req.body.provider || DEFAULT_PROVIDER).toLowerCase(),
+      inputOriginalName: originalName,
     };
 
     const stats = await performTranslation(inputFilePath, outputFilePath, options);
@@ -309,6 +349,8 @@ app.post('/api/translate-async', upload.single('file'), async (req, res) => {
       systemInstruction: req.body.systemInstruction,
       structuredMode: normalizedStructuredMode,
       logLevel: req.body.logLevel || 'info',
+      provider: (req.body.provider || DEFAULT_PROVIDER).toLowerCase(),
+      inputOriginalName: originalName,
     };
 
     const jobId = createJobId();
@@ -448,6 +490,7 @@ app.post('/api/translate-path', async (req, res) => {
       systemInstruction: options.systemInstruction,
       structuredMode: normalizedStructuredMode,
       logLevel: options.logLevel || 'info',
+      provider: (options.provider || DEFAULT_PROVIDER).toLowerCase(),
     };
 
     const stats = await performTranslation(inputPath, finalOutputPath, translationOptions);

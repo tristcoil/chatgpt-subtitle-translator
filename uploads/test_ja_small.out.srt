@@ -4,16 +4,17 @@ Good morning.
 
 2
 00:00:02,000 --> 00:00:05,000
-How are you?
+Are you feeling well?
 
 3
 00:00:05,000 --> 00:00:07,000
-Yes, I’m fine.
+Yes, I'm fine, thank you.
 
 4
 00:00:08,000 --> 00:00:12,000
-The weather is nice today, isn’t it?
+Isn't the weather nice today?
 
 5
 00:00:12,000 --> 00:00:16,000
-Yes, it’s very nice weather.
+Yes, it's very nice weather indeed.
+
