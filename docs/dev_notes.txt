@@ -1,0 +1,96 @@
+
+
+working prompt:
+
+coil@coil-VM:chatgpt-subtitle-translator$ curl -X POST http://127.0.0.1:5100/api/translate   -F "file=@test/data/test_ja_small.srt"   -F "to=English"   -F "from=Japanese"   -F "model=llama3.2:3b"   -F "provider=ollama"   -F "temperature=0"   -F 'systemInstruction=Translate Japanese to English.
+Output ONLY the translation for each input line.
+Do not explain, do not comment, do not add numbering. 
+Preserve the number of lines and their order.
+Do not translate timestamps or timecodes; they are handled separately.'
+Warning: skip unknown form field: they are handled separately.
+{"success":true,"message":"Translation completed","outputFile":"uploads/test_ja_small.out.srt","outputFileName":"test_ja_small.out.srt","statistics":{"promptTokensUsed":113,"promptTokensWasted":0,"cachedTokens":null,"completionTokensUsed":34,"completionTokensWasted":0,"estimatedCost":null,"linesTranslated":5}}coil@coil-VM:chatgpt-subtitle-translator$ 
+
+
+
+
+
+another example prompt:
+
+
+
+
+
+curl -X POST http://127.0.0.1:5100/api/translate \
+  -F "file=@test/data/test_ja_small.srt" \
+  -F "to=English" \
+  -F "from=Japanese" \
+  -F "model=llama3.2:3b" \
+  -F "provider=ollama" \
+  -F "temperature=0"
+
+
+
+
+
+
+
+
+
+
+
+
+bansanka
+------------------------------------------------------------------
+
+
+
+curl -X POST http://127.0.0.1:5100/api/translate \
+  -F "file=@songs/raon_bansanka.srt" \
+  -F "to=English" \
+  -F "from=Japanese" \
+  -F "model=llama3.2:3b" \
+  -F "provider=ollama" \
+  -F "temperature=0" \
+  -F 'systemInstruction=Translate Japanese to English.
+Output ONLY the translation for each input line.
+Do not explain, do not comment, do not add numbering.
+Preserve the number of lines and their order.
+Do not translate timestamps or timecodes; they are handled separately.'
+
+
+
+
+
+
+async job w progress
+
+curl -s -X POST http://127.0.0.1:5100/api/translate-async \
+  -F "file=@songs/raon_bansanka.srt" \
+  -F "to=English" \
+  -F "from=Japanese" \
+  -F "model=llama3.2:3b" \
+  -F "provider=ollama" \
+  -F "temperature=0" \
+  -F 'systemInstruction=Translate Japanese to English.
+Output ONLY the translation for each input line.
+Do not explain, do not comment, do not add numbering.
+Preserve the number of lines and their order.
+Do not translate timestamps or timecodes; they are handled separately.' | tee job.json
+
+# Extract job ID and watch progress
+JOB_ID=$(jq -r '.jobId' job.json)
+curl -N http://127.0.0.1:5100/api/jobs/$JOB_ID/events
+
+# Download when done
+curl -O "http://127.0.0.1:5100/api/jobs/$JOB_ID/download"
+
+
+
+
+
+
+
+
+aaaaand how to start a server:
+
+PORT=5100 LLM_PROVIDER=ollama OLLAMA_OPENAI_BASE_URL=http://127.0.0.1:11434/v1 node server.js
