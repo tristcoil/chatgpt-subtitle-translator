@@ -1,0 +1,20 @@
+# Node
+node_modules
+npm-debug.log
+
+# Local files
+uploads
+.env
+.env.local
+
+# VCS
+.git
+.gitignore
+
+# Tests and docs (optional for lighter images)
+/test
+/docs
+**/*.md
+
+# OS
+.DS_Store

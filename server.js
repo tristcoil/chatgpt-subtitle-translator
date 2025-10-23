@@ -461,6 +461,79 @@ app.get('/api/jobs/:id/download', (req, res) => {
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Output file not found' });
   res.download(filePath, path.basename(filePath));
 });
+
+// Direct LLM ask (bypass translation pipeline)
+// Body: { provider?, model?, systemInstruction?, prompt, temperature? }
+app.post('/api/ask', async (req, res) => {
+  try {
+    const {
+      provider: requestedProvider = DEFAULT_PROVIDER,
+      model = DefaultOptions.createChatCompletionRequest.model,
+      systemInstruction,
+      prompt,
+      temperature,
+      stream = false,
+    } = req.body || {};
+
+    if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+      return res.status(400).json({ error: 'prompt is required' });
+    }
+
+    const { openai, provider } = getLLMClients(String(requestedProvider).toLowerCase());
+    const messages = [];
+    if (systemInstruction) messages.push({ role: 'system', content: String(systemInstruction) });
+    messages.push({ role: 'user', content: String(prompt) });
+
+    if (stream) {
+      // Minimal SSE streaming for parity; optional use
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders?.();
+      try {
+        const response = await openai.chat.completions.create({
+          model,
+          messages,
+          stream: true,
+          stream_options: { include_usage: true },
+          ...(temperature !== undefined ? { temperature: Number(temperature) } : {}),
+        });
+
+        let usage;
+        for await (const part of response) {
+          const text = part.choices?.[0]?.delta?.content;
+          if (text) {
+            res.write(`event: delta\n`);
+            res.write(`data: ${JSON.stringify({ delta: text })}\n\n`);
+          }
+          if (part.usage) usage = part.usage;
+        }
+        res.write(`event: done\n`);
+        res.write(`data: ${JSON.stringify({ provider, model, usage })}\n\n`);
+        res.end();
+      } catch (err) {
+        log.error('[API /api/ask stream error]', err);
+        if (!res.headersSent) return res.status(500).json({ error: 'Ask failed', message: String(err?.message || err) });
+        try { res.end(); } catch {}
+      }
+      return;
+    }
+
+    const completion = await openai.chat.completions.create({
+      model,
+      messages,
+      stream: false,
+      ...(temperature !== undefined ? { temperature: Number(temperature) } : {}),
+    });
+
+    const text = completion.choices?.[0]?.message?.content ?? '';
+    const usage = completion.usage;
+    res.json({ success: true, provider, model, text, usage });
+  } catch (error) {
+    log.error('[API /api/ask error]', error);
+    res.status(500).json({ error: 'Ask failed', message: error.message });
+  }
+});
 // Translate by path
 app.post('/api/translate-path', async (req, res) => {
   try {
@@ -517,6 +590,127 @@ app.get('/api/download/:filename', (req, res) => {
       }
     }
   });
+});
+
+// Japanese word segmentation (wakachi-gaki) via LLM
+// Input: { text: string, provider?, model?, temperature?, keepPunctuation? }
+// Output: JSON array of strings (words) ONLY
+app.post('/api/jp-tokenize', async (req, res) => {
+  try {
+    const { text, provider: requestedProvider = DEFAULT_PROVIDER, model = 'qwen2.5:7b', temperature, keepPunctuation = false, ollamaOptions } = req.body || {};
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
+      return res.status(400).json({ error: 'text is required' });
+    }
+
+    const { openai, provider } = getLLMClients(String(requestedProvider).toLowerCase());
+    const sys = `You are a Japanese tokenizer performing wakachi-gaki (word segmentation).` +
+      ` Given ONE Japanese sentence, output ONLY a JSON array of strings representing the words in order.` +
+      ` ${keepPunctuation ? 'Include punctuation as separate tokens when present.' : 'Exclude punctuation symbols.'}` +
+      ` Do not translate. Do not explain. Do not add keys or code fences. Reply with JSON only.`;
+
+    /** @type {import('openai').OpenAI.Chat.ChatCompletionMessageParam[]} */
+    const messages = [
+      { role: 'system', content: sys },
+      { role: 'user', content: text }
+    ];
+
+    const completion = await openai.chat.completions.create({
+      model,
+      messages,
+      stream: false,
+      ...(temperature !== undefined ? { temperature: Number(temperature) } : { temperature: 0 }),
+      ...(provider === 'ollama' && ollamaOptions && typeof ollamaOptions === 'object' ? { extra_body: { options: ollamaOptions } } : {})
+    });
+
+    let raw = completion.choices?.[0]?.message?.content ?? '';
+    // Try strict JSON first
+    const tryParse = (s) => {
+      try { return JSON.parse(s); } catch { return undefined; }
+    };
+    let parsed = tryParse(raw);
+    if (!parsed) {
+      // Extract JSON array substring if model added extra text or code fences
+      const start = raw.indexOf('[');
+      const end = raw.lastIndexOf(']');
+      if (start !== -1 && end !== -1 && end > start) {
+        parsed = tryParse(raw.slice(start, end + 1));
+      }
+    }
+    if (!Array.isArray(parsed)) {
+      return res.status(502).json({ error: 'Model did not return a JSON array', provider, model, raw });
+    }
+
+    // Ensure array of strings only
+    const words = parsed.map((x) => (typeof x === 'string' ? x : String(x))).filter((s) => s.length > 0);
+    res.json(words);
+  } catch (error) {
+    log.error('[API /api/jp-tokenize error]', error);
+    res.status(500).json({ error: 'Tokenization failed', message: error.message });
+  }
+});
+
+// Japanese tokenization with annotations (romanization + translation per word)
+// Input: { text: string, provider?, model?, temperature?, keepPunctuation? }
+// Output: JSON array of { word: string, romanization: string, translation: string }
+app.post('/api/jp-tokenize-annotate', async (req, res) => {
+  try {
+    const { text, provider: requestedProvider = DEFAULT_PROVIDER, model = 'qwen2.5:7b', temperature, keepPunctuation = false, ollamaOptions } = req.body || {};
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
+      return res.status(400).json({ error: 'text is required' });
+    }
+
+    const { openai, provider } = getLLMClients(String(requestedProvider).toLowerCase());
+    const sys = `You are a Japanese tokenizer and annotator.` +
+      ` Perform wakachi-gaki (word segmentation) on ONE Japanese sentence and output ONLY a JSON array.` +
+      ` Each element must be an object with keys: "word" (surface form), "romanization" (Hepburn romaji), "translation" (concise English gloss).` +
+      ` ${keepPunctuation ? 'Include punctuation as separate tokens with romanization empty and translation as the symbol.' : 'Exclude punctuation symbols.'}` +
+      ` Do not translate the whole sentence. Do not explain. Do not add keys other than word/romanization/translation. No code fences. Reply with JSON only.`;
+
+    /** @type {import('openai').OpenAI.Chat.ChatCompletionMessageParam[]} */
+    const messages = [
+      { role: 'system', content: sys },
+      { role: 'user', content: text }
+    ];
+
+    const completion = await openai.chat.completions.create({
+      model,
+      messages,
+      stream: false,
+      ...(temperature !== undefined ? { temperature: Number(temperature) } : { temperature: 0 }),
+      ...(provider === 'ollama' && ollamaOptions && typeof ollamaOptions === 'object' ? { extra_body: { options: ollamaOptions } } : {})
+    });
+
+    let raw = completion.choices?.[0]?.message?.content ?? '';
+    const tryParse = (s) => { try { return JSON.parse(s); } catch { return undefined; } };
+    let parsed = tryParse(raw);
+    if (!parsed) {
+      const start = raw.indexOf('[');
+      const end = raw.lastIndexOf(']');
+      if (start !== -1 && end !== -1 && end > start) {
+        parsed = tryParse(raw.slice(start, end + 1));
+      }
+    }
+    if (!Array.isArray(parsed)) {
+      return res.status(502).json({ error: 'Model did not return a JSON array', provider, model, raw });
+    }
+
+    // Normalize objects and enforce fields
+    const out = parsed.map((item) => {
+      if (item && typeof item === 'object') {
+        const word = String(item.word ?? item.term ?? item.surface ?? '').trim();
+        const romanization = String(item.romanization ?? item.romaji ?? item.reading ?? '').trim();
+        const translation = String(item.translation ?? item.gloss ?? item.meaning ?? '').trim();
+        return { word, romanization, translation };
+      }
+      // If model returned plain strings, coerce
+      return { word: String(item), romanization: '', translation: '' };
+    }).filter((x) => x.word.length > 0);
+
+    res.json(out);
+  } catch (error) {
+    log.error('[API /api/jp-tokenize-annotate error]', error);
+    res.status(500).json({ error: 'Tokenization annotation failed', message: error.message });
+  }
 });
 
 const PORT = parseInt(process.env.PORT || '5100', 10);

@@ -1,0 +1,51 @@
+version: "3.9"
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    # To enable NVIDIA GPU acceleration, uncomment the block below and run with a recent Docker/Compose:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: subtitle-translator:latest
+    container_name: subtitle-translator
+    restart: unless-stopped
+    depends_on:
+      - ollama
+    environment:
+      - NODE_ENV=production
+      - PORT=5100
+      - HOST=0.0.0.0
+      - LLM_PROVIDER=ollama
+      - OLLAMA_OPENAI_BASE_URL=http://ollama:11434/v1
+      - LOG_LEVEL=info
+      # Optional OpenAI when switching provider
+      # - OPENAI_API_KEY=
+      # - OPENAI_BASE_URL=
+    ports:
+      - "5100:5100"
+    # Persist outputs if desired
+    volumes:
+      - uploads:/app/uploads
+
+volumes:
+  ollama:
+    external: true
+    name: ollama
+  uploads:
+    driver: local

@@ -16,6 +16,13 @@ This utility uses the OpenAI ChatGPT API to translate text, with a specific focu
 - Request per minute (RPM) [rate limits](https://platform.openai.com/docs/guides/rate-limits/overview)  
 - Progress resumption (CLI only)
 
+## Docs
+- Docker Compose + direct ask API: [docs/docker-compose-and-ask.md](./docs/docker-compose-and-ask.md)
+- Japanese tokenization APIs (wakachi-gaki + annotations): [docs/tokenization.md](./docs/tokenization.md)
+- Qwen3 model guide and commands: [docs/qwen3-models-guide.md](./docs/qwen3-models-guide.md)
+- Ollama quickstart (llama3.2:3b): [docs/ollama-llama3.2-quickstart.md](./docs/ollama-llama3.2-quickstart.md)
+- Ollama integration notes: [OLLAMA.md](./OLLAMA.md)
+
 
 ## Setup
 Reference: <https://github.com/openai/openai-quickstart-node#setup>
