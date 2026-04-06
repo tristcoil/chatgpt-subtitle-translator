@@ -58,6 +58,7 @@ export function createOpenAIClient(apiKey, dangerouslyAllowBrowser = undefined, 
         baseURL,
         dangerouslyAllowBrowser: dangerouslyAllowBrowser,
         maxRetries: 3,
+        timeout: 7_200_000, // 2 hours — accommodates slow CPU inference on local models
         fetchOptions: proxyAgent === undefined ? undefined : { dispatcher: proxyAgent},
     });
 }

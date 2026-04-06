@@ -1,5 +1,37 @@
 
 
+---
+
+## CLI vs Server async — when to use which
+
+CLI (node cli/translator.mjs):
+- No server needed, runs directly in terminal
+- Output saved next to the input file as <file>.out_English.srt
+- Progress saved to .progress_English.csv — resumes automatically if interrupted
+- Best for: manual one-off translations, slow CPU jobs (resume on crash)
+
+Server async (node server.js + curl /api/translate-async):
+- Requires server running first
+- File uploaded via HTTP, output stored in uploads/
+- Returns a jobId immediately; monitor via SSE (/api/jobs/$JOB_ID/events)
+- No resume support — job lost if server restarts
+- Best for: automation, n8n workflows, web UI integration
+
+For slow CPU / long jobs: use CLI (safer due to resume support).
+
+---
+
+aaaaand how to start a server:
+
+PORT=5100 LLM_PROVIDER=ollama OLLAMA_OPENAI_BASE_URL=http://127.0.0.1:11434/v1 node server.js
+
+---
+
+
+
+
+
+
 working prompt:
 
 coil@coil-VM:chatgpt-subtitle-translator$ curl -X POST http://127.0.0.1:5100/api/translate   -F "file=@test/data/test_ja_small.srt"   -F "to=English"   -F "from=Japanese"   -F "model=llama3.2:3b"   -F "provider=ollama"   -F "temperature=0"   -F 'systemInstruction=Translate Japanese to English.
@@ -94,3 +126,143 @@ curl -O "http://127.0.0.1:5100/api/jobs/$JOB_ID/download"
 aaaaand how to start a server:
 
 PORT=5100 LLM_PROVIDER=ollama OLLAMA_OPENAI_BASE_URL=http://127.0.0.1:11434/v1 node server.js
+
+
+
+
+
+-----------------------------------------------------------------------
+
+
+Bite Size Japanese podcast 
+
+
+OPENAI_BASE_URL=http://127.0.0.1:11434/v1 OPENAI_API_KEY=ollama \
+  node cli/translator.mjs \
+  -i podcasts/BSJ_666_stereotypes_japanese.srt \
+  --from Japanese \
+  --to English \
+  --model qwen3:8b \
+  --no-use-moderator
+
+
+# Extract job ID and watch progress
+JOB_ID=$(jq -r '.jobId' job.json)
+curl -N http://127.0.0.1:5100/api/jobs/$JOB_ID/events
+
+
+
+---------------------------------------------------------------------------------------
+
+full
+
+
+
+coil@coil-VM:chatgpt-subtitle-translator$ OPENAI_BASE_URL=http://127.0.0.1:11434/v1 OPENAI_API_KEY=ollama   node cli/translator.mjs   -i songs/raon_bansanka.srt   --from Japanese   --to English   --model qwen3:8b   --no-use-moderator
+[CLI] Log level DEBUG
+[CLI] Assume SRT file songs/raon_bansanka.srt
+[CLI] Resuming from songs/raon_bansanka.srt.progress_English.csv 0
+[Translator] System Instruction: Translate Japanese to English
+[Translator] [ThinkBlock] Detected
+ <think>
+Alright, let me tackle this translation request. The user provided a list of 42 Japanese sentences, and they want them translated into English. First, I need to make sure I understand the context. These lines seem like lyrics from a song, possibly a ballad with emotional themes, given the repetition of phrases like "君を泣かすから" (I make you cry) and mentions of love and longing.
+
+I'll start by going through each line one by one. Some lines are repeated, like "君を泣かすから" appearing multiple times. I should check if there's a specific structure or if the repetition is intentional for emphasis. Also, phrases like "最高のフルコースを頂戴" translate to "Please serve me the finest full course," which is a bit whimsical and might be a metaphor for something deeper, like love being the ultimate experience.
+
+I need to be careful with the translations to maintain the emotional tone. For example, "人間だからね　たまには違うものも食べたいね" translates to "Because I'm human, I sometimes want to eat different things too." This could be metaphorical, referring to wanting different experiences or emotions in a relationship.
+
+Another line is "愛の存在証明なんて" which is "This所谓 existence proof of love." The word "なんて" here might indicate a sense of sarcasm or frustration, so the translation should reflect that. 
+
+There are also lines like "君がそこに居るのにね" which is "Even though you're there," showing a contradiction or unfulfilled longing. I need to ensure these nuances are captured in English.
+
+I should also check for consistency in the translations. For instance, "何十回の夜を過ごしたって得られぬような" appears multiple times with different numbers (十, 百, 千, 万). It's important to translate these consistently as "Even after hundreds of nights spent together, you couldn't obtain such things" and adjust the numbers accordingly.
+
+Some lines have a rhythmic or poetic structure, so the translations should maintain that flow. For example, "離れないで　傍に居てくれたのは" becomes "Don't leave me, for the time you stayed by my side," which preserves the emotional plea.
+
+I need to be careful not to make the translations too literal, as that might lose the intended meaning. For example, "涙のスパイスは君の胸に" translates to "The spice of tears is in your chest," which is metaphorical. Keeping the poetic element is crucial here.
+
+Lastly, I'll review the entire list to ensure that the translated lines match the original intent, maintain the emotional weight, and are grammatically correct in English. Making sure that repeated phrases are handled consistently and that the overall tone remains consistent throughout the translation.
+</think>
+1 "君を泣かすから　だから一緒には居れないな" -> "I'll make you cry, so I can't be with you."
+2 "君を泣かすから　早く忘れて欲しいんだ" -> "I'll make you cry, so I wish you'd forget quickly."
+3 "人間だからね　たまには違うものも食べたいね" -> "Because I'm human, I sometimes want to eat different things too."
+4 "君を泣かすから　そう君を泣かすから" -> "I'll make you cry, so I'll make you cry."
+5 "でも味気ないんだよね" -> "But it's so boring."
+6 "会いたくなんだよね" -> "I miss you."
+7 "君以外会いたくないんだよね" -> "I only miss you."
+8 "なんて勝手だね" -> "How selfish of you."
+9 "大体曖昧なんだよね" -> "Basically, it's all vague."
+10 "愛の存在証明なんて" -> "This so-called proof of love's existence"
+11 "君が教えてくれないか" -> "You need to tell me, don't you?"
+12 "何十回の夜を過ごしたって得られぬような" -> "Even after spending dozens of nights, you couldn't obtain such things."
+13 "愛してるを並べてみて" -> "Try listing \"I love you\" endlessly."
+14 "何十回の夜を過ごしたって得られぬような" -> "Even after spending dozens of nights, you couldn't obtain such things."
+15 "最高のフルコースを頂戴" -> "Please serve me the finest full course."
+16 "君を泣かすから　きっと一生は無理だよね" -> "I'll make you cry, so it's definitely impossible for a lifetime."
+17 "君を泣かすから　胸がとても痛くなんだ" -> "I'll make you cry, so my chest hurts terribly."
+18 "人間だからね　たまには分かり合えなくなって" -> "Because I'm human, sometimes I can't understand each other."
+19 "君を泣かすから　また君を泣かすから" -> "I'll make you cry, so I'll make you cry again."
+20 "でも自信がないんだよね" -> "But I lack confidence."
+21 "変わりたくないんだよね" -> "I don't want to change."
+22 "君以外会いたくないんだよね" -> "I only want to meet you."
+23 "なんて勝手だね" -> "How selfish of you."
+24 "大体曖昧だったよね" -> "Basically, it was vague."
+25 "愛の存在証明なんて" -> "This so-called proof of love's existence"
+26 "君がそこに居るのにね" -> "Even though you're there."
+27 "何百回の夜を過ごしたって得られぬような" -> "Even after spending hundreds of nights, you couldn't obtain such things."
+28 "愛してるを並べてみて" -> "Try listing \"I love you\" endlessly."
+29 "何百回の夜を過ごしたって得られぬような" -> "Even after spending hundreds of nights, you couldn't obtain such things."
+30 "最高のフルコースを頂戴" -> "Please serve me the finest full course."
+31 "離れないで　傍に居てくれたのは" -> "Don't leave me, for the time you stayed by my side"
+32 "結局君一人だったよね" -> "In the end, it was only you."
+33 "涙のスパイスは君の胸に" -> "The spice of tears lies in your chest."
+34 "残ってしまうだろうけど" -> "Even so, it will remain."
+35 "何千回の夜を過ごしたって得られぬような" -> "Even after spending thousands of nights, you couldn't obtain such things."
+36 "愛してるを並べるから" -> "I'll list \"I love you\" endlessly."
+37 "何千回の夜を過ごしたって得られぬような" -> "Even after spending thousands of nights, you couldn't obtain such things."
+38 "最高のフルコースを" -> "The finest full course"
+39 "何万回の夜を過ごしたって忘れぬような" -> "Even after spending ten-thousands of nights, you couldn't forget such things."
+40 "愛してるを並べるから" -> "I'll list \"I love you\" endlessly."
+41 "何万回の夜を過ごしたって忘れぬような" -> "Even after spending ten-thousands of nights, you couldn't forget such things."
+42 "最高のフルコースを頂戴" -> "Please serve me the finest full course."
+[Translator] Cost computation not supported for qwen3:8b
+[Translator] Estimated Usage - Tokens: 1765 $ - Wasted: 0 $ - 0% Cached: - Rate: 90.46 TPM 0 RPM
+coil@coil-VM:chatgpt-subtitle-translator$ 
+
+
+
+------------------------------------------------------------------------
+
+podcast subtitle run 
+
+
+
+
+# 1. Make sure Ollama is running
+docker start ollama
+
+# 2. Delete old progress/output to start fresh
+rm -f podcasts/BSJ_666_stereotypes_japanese.srt.progress_English.csv
+rm -f podcasts/BSJ_666_stereotypes_japanese.srt.out_English.srt
+
+# 3. Translate with small batch sizes (10 lines max per API call)
+OPENAI_BASE_URL=http://127.0.0.1:11434/v1 OPENAI_API_KEY=ollama \
+  node cli/translator.mjs \
+  -i podcasts/BSJ_666_stereotypes_japanese.srt \
+  --from Japanese \
+  --to English \
+  --model qwen3:8b \
+  --no-use-moderator \
+  -b '[5, 10]'
+
+
+
+109 x 12
+56 x 12
+1 Hidden Terminal
+give me exact commands what I should run to successfuly translate the podcast subtitles
+
+In a second terminal, watch the output file grow in real time:
+
+tail -f podcasts/BSJ_666_stereotypes_japanese.srt.out_English.srt
+

@@ -1,0 +1,21 @@
+# 🎮 Aukro ROG Ally Deals — 3. 4. 2026 22:04:12
+
+🎮 Handheld Gaming Deals on Aukro — TODAY
+
+### ROG Ally
+**Worth checking:** ASUS ROG Xbox Ally - 9200 Kč / 10500 Kč (Zánovní) - ends 28m - https://aukro.cz/asus-rog-xbox-ally-7115414920
+  💬 why it's interesting: Good condition, complete bundle with charger and case.
+
+**New:** ASUS ROG ALLY Z1 extreme + ROG Mobile RTX3080 - 22222 Kč / 22222 Kč (Zánovní) - ends 19d 13h - https://aukro.cz/asus-rog-ally-z1-extreme-rog-mobile-rtx3080-7113387305
+**Skip:** GOSCINNY/UDERZO - ASTERIX LEGIONÁŘEM Č.16 (300 Kč, Použité) - not a handheld gaming device.
+
+### Legion Go
+**Worth checking:** Lenovo Legion Go Matte Screen Protector, JSAUX - 90 Kč / 90 Kč (Nové) - ends 14d 19h - https://aukro.cz/lenovo-legion-go-matte-screen-protector-jsaux-7114473377
+  💬 why it's interesting: New and unopened screen protector for Lenovo Legion Go.
+
+**Skip:** GOSCINNY/UDERZO - ASTERIX LEGIONÁŘEM Č.16 (300 Kč, Použité) - not a handheld gaming device.
+**Skip:** René Goscinny: Asterix legionářem (439 Kč, Použité) - not a handheld gaming device.
+
+### MSI Claw
+**Worth checking:** MSI Claw 8 AI+ A2VM / 1TB / 32GB / 120Hz / faktura + záruka 02/2028 - 16990 Kč / 19999 Kč (Zánovní) - ends 4d 1h - https://aukro.cz/msi-claw-8-ai-a2vm-1tb-32gb-120hz-faktura-zaruka-02-2028-7113387305
+  💬 why it's interesting: Almost new, with warranty and original accessories.

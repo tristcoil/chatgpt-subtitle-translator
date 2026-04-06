@@ -1,0 +1,275 @@
+{
+  "name": "Aukro Handheld Gaming Deal Finder",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily 8am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://aukro-tool:5050/search-with-details",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"queries\": [\"rog ally\", \"legion go\", \"msi claw\"], \"top_n\": 5}",
+        "options": {}
+      },
+      "id": "fetch-all-devices",
+      "name": "Fetch All Devices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst groups = data.results || [{ query: data.query || 'rog ally', total_found: data.total_found || 0, top_listings: data.top_listings || [] }];\nreturn groups.map(g => ({ json: g }));",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "split-by-device",
+      "name": "Split by Device",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const MARKET = {\n  'rog ally':  '- ROG Ally Z1 Extreme (2023): 7000-11000 Kč used, 11000-14000 Kč like-new\\n- ROG Ally X (2024): 13000-18000 Kč used, 18000-23000 Kč like-new',\n  'legion go': '- Lenovo Legion Go (2023, Z1 Extreme): 10000-15000 Kč used, 15000-19000 Kč like-new',\n  'msi claw':  '- MSI Claw A1M (Intel Core Ultra, 2024): 8000-13000 Kč used, 13000-17000 Kč like-new',\n};\n\nfunction renderListings(listings) {\n  return listings.map(l => {\n    const price = l.buy_now_czk\n      ? `${l.price_czk} Kč bid / ${l.buy_now_czk} Kč buy-now`\n      : `${l.price_czk} Kč${l.is_auction ? ' (auction, current bid)' : ' (fixed price)'}`;\n    const newTag = l.is_new ? ' [NEW]' : '';\n    const sellerParts = [`${l.seller_reviews ?? '?'} reviews`, `${l.seller_positive_pct ?? '?'}% positive`];\n    if (l.seller_rating) sellerParts.push(`${l.seller_rating}★`);\n    const stats = [];\n    if (l.bidders_count != null) stats.push(`${l.bidders_count} bidders`);\n    if (l.watchers_count) stats.push(`${l.watchers_count} watchers`);\n    if (l.cheapest_shipping) stats.push(`shipping: ${l.cheapest_shipping}`);\n    const attrLines = l.attributes\n      ? Object.entries(l.attributes).filter(([k]) => k !== 'Stav zboží').map(([k,v]) => `  ${k}: ${v}`).join('\\n')\n      : '';\n    return [\n      `--- LISTING${newTag} ---`,\n      `Title: ${l.title}`,\n      `Price: ${price}`,\n      `Condition: ${l.condition}`,\n      `Time left: ${l.time_left}`,\n      `Seller: ${l.seller_name || l.seller} — ${sellerParts.join(', ')}`,\n      stats.length ? stats.join(' | ') : '',\n      attrLines ? `Attributes:\\n${attrLines}` : '',\n      l.description ? `Description: ${l.description.slice(0, 200)}` : '',\n      `URL: ${l.url}`,\n    ].filter(Boolean).join('\\n');\n  }).join('\\n\\n');\n}\n\nconst items = $input.all();\nreturn items.map(item => {\n  const g = item.json;\n  const key = (g.query || '').toLowerCase();\n  const market = Object.entries(MARKET).find(([k]) => key.includes(k.split(' ')[0]))?.[1] || '';\n  const listings = g.top_listings || [];\n  const deviceLabel = g.query.toUpperCase();\n\n  const prompt = `You are a deal-analysis assistant for aukro.cz. A Czech buyer is looking for a ${deviceLabel}.\n\nMarket prices (CZK, 2026):\n${market}\n\nRules:\n- Condition: Nové > Zánovní > Rozbaleno > Použité > Poškozeno\n- Auction price = current bid, NOT the final price. 0 bidders = unknown final price.\n- Buy-now = fixed immediate price. Many bidders on auction = likely to exceed market — flag it.\n- 0 reviews is completely normal — most sellers are private individuals selling a single device. Never flag 0 reviews as a risk. Only flag if feedback % is under 90% (when reviews exist).\n- Extras (SD card, dock, case, warranty) add value — mention if present.\n\nToday's top ${listings.length} listings (${g.total_found} total on aukro.cz):\n\n${listings.length ? renderListings(listings) : '(no listings found today)'}\n\nWrite a SHORT friendly briefing for this device ONLY. Max 10 lines.\n\nFormat exactly:\n### ${deviceLabel}\n**Worth checking:**\n→ [short title] — {price} — ends {time_left} — {condition} — {url}\n  💬 one sentence: deal assessment\n\n**New since yesterday:** {titles or nothing new}\n**Skip:** {what and why, 1 line}`;\n\n  return { json: { prompt, device: g.query } };\n});",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "build-prompt",
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}"
+      },
+      "id": "llm-summarize",
+      "name": "LLM Summarize",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "qwen2.5:7b",
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "ollama-model",
+      "name": "Ollama (qwen2.5:7b)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const summaries = items.map(i => i.json.text || '').join('\\n\\n---\\n\\n');\nreturn [{ json: { combined_summary: summaries } }];"
+      },
+      "id": "combine-summaries",
+      "name": "Combine Summaries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const agentOutput = $input.first().json.combined_summary || '';\nconst now = new Date().toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' });\nconst subject = `🎮 Handheld Gaming Deals on Aukro — ${now}`;\nconst html = '<html><body style=\"font-family:monospace;font-size:14px;background:#1a1a1a;color:#e0e0e0;padding:20px\">\n' +\n  '<h2 style=\"color:#f5a623\">🎮 ' + subject + '</h2>\n' +\n  '<pre style=\"white-space:pre-wrap;line-height:1.6\">' +\n  agentOutput.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') +\n  '</pre></body></html>';\nreturn [{ json: { subject, body: agentOutput, html, timestamp: now } }];"
+      },
+      "id": "format-output",
+      "name": "Format Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { subject, body, html } = $input.first().json;\nconst date = new Date().toISOString().slice(0, 10);\nconst md = `# ${subject}\n\n${body}\n`;\nreturn [{ json: { date, md, html } }];"
+      },
+      "id": "prepare-files",
+      "name": "Prepare Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://aukro-tool:5050/save-report",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "write-files",
+      "name": "Write Files",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Daily 8am": {
+      "main": [
+        [
+          {
+            "node": "Fetch All Devices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch All Devices": {
+      "main": [
+        [
+          {
+            "node": "Split by Device",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split by Device": {
+      "main": [
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "LLM Summarize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama (qwen2.5:7b)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "LLM Summarize",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Summarize": {
+      "main": [
+        [
+          {
+            "node": "Combine Summaries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Summaries": {
+      "main": [
+        [
+          {
+            "node": "Format Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Output": {
+      "main": [
+        [
+          {
+            "node": "Prepare Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Files": {
+      "main": [
+        [
+          {
+            "node": "Write Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [
+    "aukro",
+    "deals",
+    "handheld-gaming"
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2026-04-04T00:00:00.000Z",
+  "versionId": "3"
+}

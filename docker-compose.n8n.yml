@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=Europe/Prague
+      # Disable telemetry
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_VERSION_NOTIFICATIONS_ENABLED=false
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./aukro_analyser/reports:/home/node/reports
+    networks:
+      - aukro_net
+      - ollama_net  # gives n8n access to the ollama container by name
+
+  aukro-tool:
+    build:
+      context: ./aukro_analyser/aukro_tool
+      dockerfile: Dockerfile
+    container_name: aukro-tool
+    restart: unless-stopped
+    user: "1000:1000"
+    volumes:
+      - ./aukro_analyser/reports:/reports
+    networks:
+      - aukro_net
+    # Not exposed externally — only reachable by n8n inside the Docker network
+
+networks:
+  aukro_net:
+    driver: bridge
+  ollama_net:
+    external: true
+    name: lama_langchain_rag_network  # existing network where the ollama container lives
+
+volumes:
+  n8n_data:
