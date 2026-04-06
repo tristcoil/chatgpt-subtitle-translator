@@ -28,6 +28,62 @@ PORT=5100 LLM_PROVIDER=ollama OLLAMA_OPENAI_BASE_URL=http://127.0.0.1:11434/v1 n
 ---
 
 
+## ChatGPT API (cloud) — fast translations
+
+API key is in .env (make sure .env is in .gitignore!)
+
+# Quick test (small file)
+node cli/translator.mjs \
+  -i test/data/test_ja_small.srt \
+  --from Japanese \
+  --to English \
+  --model gpt-4o-mini
+
+# Full podcast translation
+node cli/translator.mjs \
+  -i podcasts/BSJ_666_stereotypes_japanese.srt \
+  --from Japanese \
+  --to English \
+  --model gpt-4o-mini
+
+# Song translation
+node cli/translator.mjs \
+  -i songs/raon_bansanka.srt \
+  --from Japanese \
+  --to English \
+  --model gpt-4o-mini
+
+# Best quality (more expensive)
+node cli/translator.mjs \
+  -i podcasts/BSJ_666_stereotypes_japanese.srt \
+  --from Japanese \
+  --to English \
+  --model gpt-4o
+
+
+# Best quality (more expensive)
+node cli/translator.mjs \
+  -i podcasts/BSJ_679_weird_japnese_habits_japanese.srt \
+  --from Japanese \
+  --to English \
+  --model gpt-4o
+
+
+Models (as of April 2026):
+  gpt-5.4-nano — cheapest, fast, good for simple translations ($0.20/$1.25 per 1M tokens)
+  gpt-5.4-mini — strong quality, fast, great balance ($0.75/$4.50 per 1M tokens)
+  gpt-5.4      — best quality, flagship model ($2.50/$15 per 1M tokens)
+  gpt-4o-mini  — older but still works, cheaper ($0.15/$0.60 per 1M tokens)
+  gpt-4o       — older flagship ($2.50/$10 per 1M tokens)
+
+Notes:
+- No --no-use-moderator needed (OpenAI has the moderation endpoint)
+- No OPENAI_BASE_URL needed (defaults to api.openai.com)
+- No -b batch size tweaks needed (cloud API is fast)
+- 317-line podcast takes ~2 min with gpt-4o-mini vs ~2 hours on local CPU
+
+
+---
 
 
 
@@ -234,6 +290,7 @@ coil@coil-VM:chatgpt-subtitle-translator$
 ------------------------------------------------------------------------
 
 podcast subtitle run 
+qwen 3 8b works excellent for subtitle translations
 
 
 

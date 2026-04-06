@@ -8,33 +8,13 @@ How are you?
 
 3
 00:00:05,000 --> 00:00:07,000
-Yes, I'm fine.
+Yes, I am fine.
 
 4
 00:00:08,000 --> 00:00:12,000
-The weather is nice today.
+The weather is nice today, isn't it?
 
 5
 00:00:12,000 --> 00:00:16,000
-Yes, the weather is really good.
-
-1
-00:00:00,000 --> 00:00:02,000
-Good morning! It seems like you're in Japanese, which is great!  Here's a simple translation:  "Good morning."  If you'd like to respond or ask something, I'm here to help!
-
-2
-00:00:02,000 --> 00:00:05,000
-In English, this would translate to: "Are you feeling well?"
-
-3
-00:00:05,000 --> 00:00:07,000
-You're responding with more Japanese!  Here's a simple translation: "Yes, I'm fine."  So the conversation now looks like this:  1. おはようございます。 2. お元気ですか？ 3. はい、元気です。  Would you like to continue the conversation?
-
-4
-00:00:08,000 --> 00:00:12,000
-You're continuing the conversation!  Here's a simple translation: "Today's weather is nice."  Or, if you'd like to make it sound more natural in English, I could rephrase it to: "The weather today is lovely!"  So, the conversation now looks like this:   1. Good morning. 2. Are you feeling well? 3. Yes, I'm fine. 4. Today's weather is nice.  You're making progress! Would you like to keep going?  By the way, some people might say "きれい" instead of "いい" to emphasize that something is very pleasant... but both are acceptable!
-
-5
-00:00:12,000 --> 00:00:16,000
-Even better! The translation for your Japanese sentence is still accurate:  5. Yes, the weather is really lovely today.  Here's a minor note: the word "とても" is an intensifier that can make other adjectives stronger, but in this case, it's not necessary since you're already saying it's "いい天気", which means good or nice weather. The order is still correct!  You're keeping the conversation going! Here's my response as a fluent English speaker:  6. I've been looking outside and it's so beautiful today.  The phrase "いとこ" sounds like "ito kore", but actually, you used "と" (to), not "とこ".
+Yes, it is very nice weather.
 
